@@ -1,6 +1,5 @@
 import * as rest from "restify";
-import tradeRoom from "./tradeRoom";
-import compile = WebAssembly.compile;
+import tradeRoom, {trade} from "./tradeRoom";
 const fs = require("fs");
 
 let server:rest.Server
@@ -29,9 +28,9 @@ async function start(): Promise<tradeRoom> {
             if(req.params.name === "stop") {
                 answer = room.stop();
             }
-            res.contentType = "json";
-            res.send(200,{code: answer});
+            res.send(200);
             res.end();
+            process.exit(0);
             return next();
         } catch (e) {
             console.log(e);
@@ -46,12 +45,26 @@ async function start(): Promise<tradeRoom> {
         } else {
             res.send(409, {accountCreated: "false"})
         }
+        res.end();
+
+    });
+    server.post({path: "/trade/:amount/:operation/:seller/:buyer"}, async function (req, res, next) {
+        try {
+            let t:trade = new trade(req.params.amount,req.params.operation, req.params.seller, req.params.buyer, 0 );
+            room.enqueueTrade(t);
+            res.writeHead(201);
+        } catch (e) {
+            res.writeHead(409);
+            // todo send fail res
+        }
+        res.end();
 
     });
     // todo
     // get list of companies
     // post queue buy order
     // get report of individual company
+    // transfer shares
     return room;
 
 
@@ -59,21 +72,9 @@ async function start(): Promise<tradeRoom> {
 
 start().then((r) => {
     console.log("done setup, ready to use");
-    setInterval(r.executeTrades, 100);
+    setInterval(r.executeTrades, 100, r);
     // while (r.active) {
     //
     // }
 
 });
-
-
-// // a static route
-// server.get('/foo', function(req, res, next) {});
-// // a parameterized route
-// server.get('/foo/:bar', function(req, res, next) {});
-// // a regular expression
-// server.get('/example/:file(^\\d+).png', function(req, res, next) {});
-// // an options object
-// server.get({
-//     path: '/foo',
-// }, function(req, res, next) {});

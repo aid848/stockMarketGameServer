@@ -1,9 +1,12 @@
 import {Database, RunResult, Statement} from "sqlite3";
+import get = Reflect.get;
+const fs = require("fs");
 
-function hashCode(s) {
-    for(var i = 0, h = 0; i < s.length; i++)
-        h = Math.imul(31, h) + s.charCodeAt(i) | 0;
-    return h;
+
+
+function err(error) {
+    if(error !== null)
+        console.log("The error was: "+error);
 }
 
 export default class tradeRoom {
@@ -12,39 +15,45 @@ export default class tradeRoom {
     private sql;
     private defaultShares = 10000;
     private defaultPricePerShare = 1.00;
-    private tradeQueue:trade[] = []
-
+    public tradeQueue:trade[];
+    private startingMoney = 1000.0;
+    private tradeBias:number = 0.05;
 
 
     constructor(name:string) {
         this.name = name;
-        this.tradeQueue = [];
+        this.tradeQueue = new Array<trade>();
+        if (!fs.existsSync("db")) {
+            fs.mkdirSync("db");
+        }
         this.sql = new Database('./db/' + this.name + '.db')
+        this.sql.on("error", function (error) {
+            console.log("Your error was:" + error);
+        })
         //todo move to discrete SQL files
 
         // account database
         this.sql.run('CREATE TABLE IF NOT EXISTS main.companyaccount(' +
-            'name TEXT NOT NULL,' +
-            'company_ID INTEGER PRIMARY KEY,' +
-            'username TEXT UNIQUE,' +
-            'password TEXT NOT NULL' +
-            ');');
+            'name TEXT UNIQUE,' +
+            'username TEXT PRIMARY KEY,' +
+            'password TEXT NOT NULL,' +
+            'money REAL);');
 
         // trading database todo fix/add key constaints
         this.sql.run('CREATE TABLE IF NOT EXISTS main.companyindex(' +
-            'name TEXT NOT NULL,' +
+            'name TEXT PRIMARY KEY,' +
             'value REAL NOT NULL,' +
             'sharesRemaining INTEGER NOT NULL,' +
-            'previous_value REAL NOT NULL,' +
-            'company_ID INTEGER PRIMARY KEY);');
+            'previous_value REAL NOT NULL' +
+            ');');
 
 
         // todo holdings database (who owns what shares and how many)
         // todo todo fix/add key constaints
         this.sql.run('CREATE TABLE IF NOT EXISTS main.companyholdings(' +
-            'company_ID_HOLDER INTEGER PRIMARY KEY,' +
-            'company_ID_HELD INTEGER NOT NULL,' +
-            'amount INTEGER NOT NULL');
+            'holder TEXT NOT NULL,' +
+            'held TEXT NOT NULL,' +
+            'amount INTEGER NOT NULL );');
 
 
         this.active = true;
@@ -54,14 +63,25 @@ export default class tradeRoom {
     public async createAccount(username, pass,companyname): Promise<boolean> {
         return this.checkAccount(username).then((res) => {
             if (res) {
-                // todo initalize trading and holdings DBs
-                this.sql.run('insert INTO main.companyaccount(name,company_ID, username, password)' +
-                    ' VALUES (\"' + companyname + "\"," + hashCode(username) + ',\"' + username + "\",\"" + pass +  '\")');
-                return true;
+                // console.log('insert INTO main.companyaccount(name, username, password)' +
+                //     ' VALUES (\"' + companyname + '\", \"' + username + "\",\"" + pass +  '\")');
+                // todo template statments to sql file
+                return this.sql.serialize(() => {
+                    this.sql.run('insert INTO main.companyaccount(name, username, password, money)' +
+                        ' VALUES (\"' + companyname + '\", \"' + username + "\",\"" + pass +  '\",' + this.startingMoney +  ')', undefined, err);
+                    this.sql.run('insert INTO main.companyindex(name,value,sharesRemaining,previous_value)' +
+                        ' VALUES (\"' + companyname + "\"," + this.defaultPricePerShare + ',' + this.defaultShares + "," + this.defaultShares + ')', undefined, err);
+                    return true;
+                });
+
             } else {
                 return false;
             }
         })
+    }
+
+    public enqueueTrade(trade:trade):void {
+        this.tradeQueue.push(trade);
     }
 
     public async checkAccount(username):Promise<boolean> {
@@ -73,39 +93,92 @@ export default class tradeRoom {
         });
     }
 
-    public async executeTrades():Promise<void>{
-        if (this.tradeQueue !== undefined) {
-            while (this.tradeQueue.length > 0) {
-                await this.executeTrade(this.tradeQueue.shift())
+    public async executeTrades(self: tradeRoom):Promise<void>{
+        // console.log("running");
+        // console.log(self.tradeQueue);
+        if (self.tradeQueue !== undefined) {
+            console.log("queued trades: " + self.tradeQueue.length);
+            while (self.tradeQueue.length > 0) {
+                await self.executeTrade(self.tradeQueue.shift(), self);
             }
         }
         return;
     }
-    private executeTrade(trade:trade): void {
-        if(trade.operation) { // buy
-            // todo verify: enough money, enough shares to sell,
-            return this.sql.all("Select DISTINCT ", function (err: any, rows: any) { // todo querry holdings
-                // todo read rows here
-            }).then((res:number) => {
-                return this.sql.all("Select DISTINCT sharesRemaining FROM main.companyindex WHERE company_ID = " + trade.seller, function (err: any, rows: any) {
-                    // rows[0]
-                    // todo read rows here
-                }).then((res1) => {
-                    if (res + res1 === 2) {
+    private async executeTrade(trade: trade, self: tradeRoom): Promise<void> { // incomplete
+        if (trade.operation) { // buy
+            if(trade.amount <= 0) {
+                return;
+            }
+            self.sql.all("Select DISTINCT money FROM main.companyaccount WHERE name = \"" + trade.buyer + "\"", function (err: any, rows: any) { // check enough money
+                // let errors:number = 0;
+                let money: number = undefined;
+                let cost: number = undefined;
+                let shares: number = undefined;
+                let value: number = undefined;
+                    if (err !== null || rows === null || rows === undefined) {
+                        // errors++;
+                        return;
+                    } else {
+                        if (rows.length === 1) {
+                            // determine remaining money
+                            money = rows[0].money;
+                            // console.log(rows);
+                        } else {
+                            return;;
+                            // errors++;
+                        }
+                    }
+
+                self.sql.all("Select DISTINCT sharesRemaining, value FROM main.companyindex WHERE name = \"" + trade.seller + "\"", function (err: any, rows: any) { // check available shares and price
+                    // console.log("e");
+                    if (err !== null || rows === null || rows === undefined) {
+                        // errors++;
+                        return;;
+                    } else {
+                        if (rows.length === 1) {
+                            // determine share number and value
+                            value = rows[0].value;
+                            shares = rows[0].sharesRemaining;
+                            // console.log(rows);
+                        } else {
+                            return;
+                            // errors++
+                        }
+                    }
+                    if (shares === undefined || money === undefined || value === undefined) {
+                        console.log("trade failed");
+                        console.log(shares);
+                        console.log(money);
+                        console.log(value);
+                        return;
+                    }
+                    cost = trade.amount * value;
+                    if (cost <= money && shares>= trade.amount) {
                         console.log("trade accepted");
                         // todo update seller and buyer tables
-                        return this.sql.run("UPDATE").then(() => {
-                            return this.sql.run("UPDATE");
+                        self.sql.serialize(() => {
+                            // buyer remove money and put owned shares on record
+                            self.sql.run("UPDATE main.companyaccount set money = " + (money - cost) + " WHERE name = \"" + trade.buyer + "\"");
+                            // todo check if existing holdings
+                            self.sql.run("INSERT INTO main.companyholdings(holder, held, amount) VALUES(\"" + trade.buyer + "\", \"" + trade.seller + "\" , " + trade.amount +");");
+                            // todo seller change available shares and share price (up or down depending on op)
+                            // tradeBias
+                            self.sql.run("UPDATE main.companyindex set sharesremaining = " + (shares-trade.amount) + " where name = \"" + trade.seller + "\"")
+                            self.sql.run("UPDATE main.companyindex set previous_value = " + value + " where name = \"" + trade.seller + "\"")
+                            self.sql.run("UPDATE main.companyindex set value = " + (value + value*self.tradeBias) + " where name = \"" + trade.seller + "\"")
                         });
                     } else {
-                        console.log("trade unsuccessful");
-                        return 0;
+                        console.log("trade unsuccessful" + cost + " and " + money);
                     }
-                })
-            })
-        }else { // sell
-            // todo verify: has that many shares
+                    return;
+                });
+                });
+
+        } else { // sell
+            // todo verify: has that many shares of that company
+            // todo restore available shares to other company
         }
+        return;
     }
 
     public transferShares(){
@@ -120,11 +193,12 @@ export default class tradeRoom {
         return true;
     }
 
-    public stop(): boolean {
+    public stop(): void {
+        // todo halt accepting trades and complete before shutdown
         console.log("stopping");
         this.sql.close();
         this.active = false
-        return true;
+        return;
     }
 
 
@@ -136,11 +210,11 @@ export class trade{
 
     private readonly _amount:number;
     private readonly _operation:boolean; // buy = 1, sell = 0
-    private readonly _seller:number;
-    private readonly _buyer:number;
+    private readonly _seller:string;
+    private readonly _buyer:string;
     private _status:number;
 
-    constructor(amount: number, operation: boolean, seller: number, buyer: number, status:number) {
+    constructor(amount: number, operation: boolean, seller: string, buyer: string, status:number) {
         this._amount = amount;
         this._operation = operation;
         this._seller = seller;
@@ -156,11 +230,11 @@ export class trade{
         return this._operation;
     }
 
-    get seller(): number {
+    get seller(): string {
         return this._seller;
     }
 
-    get buyer(): number {
+    get buyer(): string {
         return this._buyer;
     }
 
