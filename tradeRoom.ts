@@ -31,6 +31,7 @@ export default class tradeRoom {
             console.log("Your error was:" + error);
         })
         //todo move to discrete SQL files
+        // todo trades database (completed and rejected)
 
         // account database
         this.sql.run('CREATE TABLE IF NOT EXISTS main.companyaccount(' +
@@ -94,8 +95,6 @@ export default class tradeRoom {
     }
 
     public async executeTrades(self: tradeRoom):Promise<void>{
-        // console.log("running");
-        // console.log(self.tradeQueue);
         if (self.tradeQueue !== undefined) {
             console.log("queued trades: " + self.tradeQueue.length);
             while (self.tradeQueue.length > 0) {
@@ -110,7 +109,6 @@ export default class tradeRoom {
                 return;
             }
             self.sql.all("Select DISTINCT money FROM main.companyaccount WHERE name = \"" + trade.buyer + "\"", function (err: any, rows: any) { // check enough money
-                // let errors:number = 0;
                 let money: number = undefined;
                 let cost: number = undefined;
                 let shares: number = undefined;
@@ -160,12 +158,16 @@ export default class tradeRoom {
                             // buyer remove money and put owned shares on record
                             self.sql.run("UPDATE main.companyaccount set money = " + (money - cost) + " WHERE name = \"" + trade.buyer + "\"");
                             // todo check if existing holdings
-                            self.sql.run("INSERT INTO main.companyholdings(holder, held, amount) VALUES(\"" + trade.buyer + "\", \"" + trade.seller + "\" , " + trade.amount +");");
-                            // todo seller change available shares and share price (up or down depending on op)
-                            // tradeBias
+                            self.sql.all("SELECT * FROM main.companyholdings WHERE holder = \"" + trade.buyer + "\" AND held = \"" + trade.seller + "\"", function (err:any, rows:any) {
+                                if(rows.length === 0) {
+                                    self.sql.run("INSERT INTO main.companyholdings(holder, held, amount) VALUES(\"" + trade.buyer + "\", \"" + trade.seller + "\" , " + trade.amount +");");
+                                }else { // update holdings
+                                    self.sql.run("UPDATE main.companyholdings set amount = " + (parseInt(rows[0].amount) + parseInt(String(trade.amount))) + " WHERE holder = \"" + trade.buyer + "\" AND held = \"" + trade.seller + "\"");
+                                }
+                            })
                             self.sql.run("UPDATE main.companyindex set sharesremaining = " + (shares-trade.amount) + " where name = \"" + trade.seller + "\"")
                             self.sql.run("UPDATE main.companyindex set previous_value = " + value + " where name = \"" + trade.seller + "\"")
-                            self.sql.run("UPDATE main.companyindex set value = " + (value + value*self.tradeBias) + " where name = \"" + trade.seller + "\"")
+                            self.sql.run("UPDATE main.companyindex set value = " + (value + value*self.tradeBias*trade.amount) + " where name = \"" + trade.seller + "\"")
                         });
                     } else {
                         console.log("trade unsuccessful" + cost + " and " + money);
@@ -175,14 +177,38 @@ export default class tradeRoom {
                 });
 
         } else { // sell
+            this.sql.all("SELECT DISTINCT ",function (err:any, rows: any) {
+
+            })
             // todo verify: has that many shares of that company
             // todo restore available shares to other company
+            // todo drop share price
         }
         return;
     }
 
     public transferShares(){
         // todo
+    }
+
+    public async getCompanies(self: tradeRoom):Promise<any> {
+            return this.checkCompanies(self).then((res)=> {
+                return res;
+            });
+
+    }
+
+    private async checkCompanies(self: tradeRoom){
+
+        return new Promise((resolve, reject) => {
+            self.sql.all("SELECT DISTINCT * FROM main.companyindex ORDER BY value ASC", (err:any, rows:any) => {
+                // console.log(err);
+                if(err !== null) {
+                    reject(err);
+                }
+                resolve(rows);
+            });
+        })
     }
 
 

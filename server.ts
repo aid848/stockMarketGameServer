@@ -51,7 +51,7 @@ async function start(): Promise<tradeRoom> {
     server.post({path: "/trade/:amount/:operation/:seller/:buyer"}, async function (req, res, next) {
         try {
             let t:trade = new trade(req.params.amount,req.params.operation, req.params.seller, req.params.buyer, 0 );
-            room.enqueueTrade(t);
+            room.enqueueTrade(t); // todo provide response to trader when trade completed
             res.writeHead(201);
         } catch (e) {
             res.writeHead(409);
@@ -60,11 +60,18 @@ async function start(): Promise<tradeRoom> {
         res.end();
 
     });
+    server.get({path: "/companies"}, async function (req,res,next) {
+        res.contentType = "json";
+        let x = await room.getCompanies(room)
+        res.send(200,x);
+        res.end();
+
+
+    });
     // todo
-    // get list of companies
-    // post queue buy order
     // get report of individual company
-    // transfer shares
+    // get completed trades per person
+    // post transfer shares
     return room;
 
 
