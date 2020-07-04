@@ -71,7 +71,7 @@ export default class tradeRoom {
                     this.sql.run('insert INTO main.companyaccount(name, username, password, money)' +
                         ' VALUES (\"' + companyname + '\", \"' + username + "\",\"" + pass +  '\",' + this.startingMoney +  ')', undefined, err);
                     this.sql.run('insert INTO main.companyindex(name,value,sharesRemaining,previous_value)' +
-                        ' VALUES (\"' + companyname + "\"," + this.defaultPricePerShare + ',' + this.defaultShares + "," + this.defaultShares + ')', undefined, err);
+                        ' VALUES (\"' + companyname + "\"," + this.defaultPricePerShare + ',' + this.defaultShares + "," + this.defaultPricePerShare + ')', undefined, err);
                     return true;
                 });
 
@@ -103,8 +103,8 @@ export default class tradeRoom {
         }
         return;
     }
-    private async executeTrade(trade: trade, self: tradeRoom): Promise<void> { // incomplete
-        if (trade.operation) { // buy
+    private async executeTrade(trade: trade, self: tradeRoom): Promise<void> { // todo convert to sending promise value to request
+        if (trade.operation == 1) { // buy
             if(trade.amount <= 0) {
                 return;
             }
@@ -167,7 +167,11 @@ export default class tradeRoom {
                             })
                             self.sql.run("UPDATE main.companyindex set sharesremaining = " + (shares-trade.amount) + " where name = \"" + trade.seller + "\"")
                             self.sql.run("UPDATE main.companyindex set previous_value = " + value + " where name = \"" + trade.seller + "\"")
-                            self.sql.run("UPDATE main.companyindex set value = " + (value + value*self.tradeBias*trade.amount) + " where name = \"" + trade.seller + "\"")
+                            let newvalue:number = (value + value*self.tradeBias*trade.amount);
+                            if (newvalue <= 0) {
+                                newvalue = self.tradeBias*trade.amount;
+                            }
+                            self.sql.run("UPDATE main.companyindex set value = " + newvalue + " where name = \"" + trade.seller + "\"")
                         });
                     } else {
                         console.log("trade unsuccessful" + cost + " and " + money);
@@ -177,12 +181,48 @@ export default class tradeRoom {
                 });
 
         } else { // sell
-            this.sql.all("SELECT DISTINCT ",function (err:any, rows: any) {
+            self.sql.all("SELECT * FROM main.companyholdings WHERE holder = \"" + trade.buyer + "\" AND held = \"" + trade.seller + "\"",function (err:any, rows: any) {
+                if (rows.length === 1) {
+                    let amount:number = rows[0].amount;
+                    if(amount < trade.amount) { // check enough shares to sell
+                        console.log("insufficient shares");
+                        return;
+                    }
+                    self.sql.all("SELECT * FROM main.companyindex WHERE name = \"" + trade.seller + "\"", function (err, rows) {
+                        if (rows.length === 1){
+                            let value: number = rows[0].value;
+                            let remaining:number = rows[0].sharesRemaining;
+                            self.sql.all("SELECT * FROM main.companyaccount WHERE name = \"" + trade.buyer + "\"" , function (err,rows) {
+                                if (rows.length === 1) {
+                                    let money:number = rows[0].money;
+                                    self.sql.serialize(() => {
+                                        // update remaining shares
+                                        self.sql.run("UPDATE main.companyholdings set amount = " + (amount - trade.amount) + " WHERE holder = \"" + trade.buyer + "\" AND held = \"" + trade.seller + "\"");
+                                        // add shares back to available
+                                        let sremaining:number = (remaining + parseInt(String(trade.amount))) as number
+                                        self.sql.run("UPDATE main.companyindex set sharesRemaining = " + sremaining + " WHERE name = \"" + trade.seller + "\"");
+                                        // todo drop share value
+                                        let newval:number = (value - (value * self.tradeBias * trade.amount));
+                                        if (newval < 0) {
+                                            newval = 0;
+                                        }
+                                        self.sql.run("UPDATE main.companyindex set value = " + newval + " WHERE name = \"" + trade.seller + "\"");
+                                        // todo add money
+                                        self.sql.run("UPDATE main.companyaccount set money = " + (money + value*trade.amount) + " WHERE name = \"" + trade.buyer + "\"");
 
+                                    })
+                                }
+                            })
+                    }
+                    })
+
+
+                }else {
+                    console.log("no record of ownership");
+                }
+                return;
             })
-            // todo verify: has that many shares of that company
-            // todo restore available shares to other company
-            // todo drop share price
+
         }
         return;
     }
@@ -235,12 +275,12 @@ export default class tradeRoom {
 export class trade{
 
     private readonly _amount:number;
-    private readonly _operation:boolean; // buy = 1, sell = 0
+    private readonly _operation:number; // buy = 1, sell = 0
     private readonly _seller:string;
     private readonly _buyer:string;
     private _status:number;
 
-    constructor(amount: number, operation: boolean, seller: string, buyer: string, status:number) {
+    constructor(amount: number, operation: number, seller: string, buyer: string, status:number) {
         this._amount = amount;
         this._operation = operation;
         this._seller = seller;
@@ -252,7 +292,7 @@ export class trade{
         return this._amount;
     }
 
-    get operation(): boolean {
+    get operation(): number {
         return this._operation;
     }
 

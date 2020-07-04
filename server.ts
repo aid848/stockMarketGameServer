@@ -69,6 +69,8 @@ async function start(): Promise<tradeRoom> {
 
     });
     // todo
+
+
     // get report of individual company
     // get completed trades per person
     // post transfer shares
