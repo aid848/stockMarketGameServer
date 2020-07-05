@@ -14,10 +14,10 @@ export default class tradeRoom {
     public active: boolean;
     private sql;
     private defaultShares = 10000;
-    private defaultPricePerShare = 1.00;
+    private defaultPricePerShare = 5.00;
     public tradeQueue:trade[];
     private startingMoney = 1000.0;
-    private tradeBias:number = 0.05;
+    private tradeBias:number = 0.0005;
 
 
     constructor(name:string) {
@@ -45,7 +45,7 @@ export default class tradeRoom {
             'name TEXT PRIMARY KEY,' +
             'value REAL NOT NULL,' +
             'sharesRemaining INTEGER NOT NULL,' +
-            'previous_value REAL NOT NULL' +
+            'previous_value REAL NOT NULL' + // todo this needs to be computed in a better way
             ');');
 
 
@@ -94,17 +94,19 @@ export default class tradeRoom {
         });
     }
 
-    public async loginCheck(username:string, password:string, self:tradeRoom):Promise<boolean> {
+    public async loginCheck(username:string, password:string, self:tradeRoom):Promise<String> {
         // todo change to return access token
         return new Promise<any> ((resolve, reject) => {self.sql.all("SELECT * FROM main.companyaccount WHERE username = \"" + username + "\" AND password = \"" + password + "\"", function (err:any, rows:any) {
             console.log(rows);
             if(err!=undefined) {
-                resolve(false);
+                reject("");
             }else {
-                if(rows.length !== 1) {
-                    resolve(false);
+                if(rows.length !== 1 ) {
+                    reject("");
+                }else {
+                    resolve(rows[0].name);
                 }
-                resolve(true);
+
             }
         } )});
     }

@@ -33,13 +33,11 @@ async function start(): Promise<tradeRoom> {
         if(req.body !== undefined) {
             if(req.body["username"] !== undefined && req.body["password"] !== undefined) {
                 room.loginCheck(req.body["username"], req.body["password"], room).then((answer) => {
-                    if (answer == true) {
-                        res.send(202);
-                        console.log("accepted")
-                    }else {
-                        res.send(409);
-                        console.log("denied" + answer)
-                    }
+                    res.send(202, {name: answer});
+                    console.log("accepted")
+                    res.end();
+                }).catch((err) => {
+                    res.send(409);
                     res.end();
                 })
             }else {
