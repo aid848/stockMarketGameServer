@@ -94,6 +94,21 @@ export default class tradeRoom {
         });
     }
 
+    public async loginCheck(username:string, password:string, self:tradeRoom):Promise<boolean> {
+        // todo change to return access token
+        return new Promise<any> ((resolve, reject) => {self.sql.all("SELECT * FROM main.companyaccount WHERE username = \"" + username + "\" AND password = \"" + password + "\"", function (err:any, rows:any) {
+            console.log(rows);
+            if(err!=undefined) {
+                resolve(false);
+            }else {
+                if(rows.length !== 1) {
+                    resolve(false);
+                }
+                resolve(true);
+            }
+        } )});
+    }
+
     public async executeTrades(self: tradeRoom):Promise<void>{
         if (self.tradeQueue !== undefined) {
             // console.log("queued trades: " + self.tradeQueue.length);

@@ -30,7 +30,26 @@ async function start(): Promise<tradeRoom> {
     });
     server.post({path: "/login"}, function (req,res,next) {
         console.log(req.body);
-        res.send(202);
+        if(req.body !== undefined) {
+            if(req.body["username"] !== undefined && req.body["password"] !== undefined) {
+                room.loginCheck(req.body["username"], req.body["password"], room).then((answer) => {
+                    if (answer == true) {
+                        res.send(202);
+                        console.log("accepted")
+                    }else {
+                        res.send(409);
+                        console.log("denied" + answer)
+                    }
+                    res.end();
+                })
+            }else {
+                res.send(409);
+                res.end();
+            }
+        }else {
+            res.send(409);
+            res.end();
+        }
     });
     server.post({path: "/adminop/:name"}, function (req,res,next) {
         // todo modify stock price
