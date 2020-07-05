@@ -96,7 +96,7 @@ export default class tradeRoom {
 
     public async executeTrades(self: tradeRoom):Promise<void>{
         if (self.tradeQueue !== undefined) {
-            console.log("queued trades: " + self.tradeQueue.length);
+            // console.log("queued trades: " + self.tradeQueue.length);
             while (self.tradeQueue.length > 0) {
                 await self.executeTrade(self.tradeQueue.shift(), self);
             }

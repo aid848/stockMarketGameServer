@@ -1,5 +1,6 @@
 import * as rest from "restify";
 import tradeRoom, {trade} from "./tradeRoom";
+import * as corsMiddleware from "restify-cors-middleware";
 const fs = require("fs");
 
 let server:rest.Server
@@ -8,21 +9,34 @@ let port:number = 8080;
 
 
 async function start(): Promise<tradeRoom> {
+    const cors = corsMiddleware({
+        preflightMaxAge:5,
+        origins: ["*"],
+        allowHeaders: ["*"],
+        exposeHeaders: ["*"],
+
+    });
+
     server = rest.createServer({name: "test"});
     let room:tradeRoom = new tradeRoom("test");
-
+    server.pre(cors.preflight);
+    server.use(cors.actual);
+    server.use(rest.plugins.bodyParser());
     server.listen(port, function () {
         console.log("listening on " + server.url);
     });
     server.on("error", function () {
         console.log("err");
-    })
+    });
+    server.post({path: "/login"}, function (req,res,next) {
+        console.log(req.body);
+        res.send(202);
+    });
     server.post({path: "/adminop/:name"}, function (req,res,next) {
-        // todo authentication check
         // todo modify stock price
         // todo modify money
         // todo resetDB
-        // todo backup DB
+        // todo backup/restore DB
         try {
             let answer = undefined;
             if(req.params.name === "stop") {
@@ -65,12 +79,16 @@ async function start(): Promise<tradeRoom> {
         let x = await room.getCompanies(room)
         res.send(200,x);
         res.end();
-
-
     });
+    server.get({path: "/company/:name"}, function (req, res, next) {
+        // todo
+        res.send(404);
+        res.end();
+    })
+
+
     // todo
-
-
+    // authentication
     // get report of individual company
     // get completed trades per person
     // post transfer shares
