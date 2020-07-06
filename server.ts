@@ -79,16 +79,22 @@ async function start(): Promise<tradeRoom> {
         res.end();
 
     });
-    server.post({path: "/trade/:amount/:operation/:seller/:buyer"}, async function (req, res, next) {
+    server.post({path: "/trade"}, async function (req, res, next) {
         try {
-            let t:trade = new trade(req.params.amount,req.params.operation, req.params.seller, req.params.buyer, 0 );
-            room.enqueueTrade(t); // todo provide response to trader when trade completed
-            res.writeHead(201);
+            // console.log(req.body);
+            let t:trade = new trade(req.body.amount,req.body.operation, req.body.seller, req.body.buyer, 0);
+            // let t:trade = new trade(req.params.amount,req.params.operation, req.params.seller, req.params.buyer, 0 );
+            // room.enqueueTrade(t); // todo provide response to trader when trade completed
+            room.executeTrade(t, room).then((ans:string) => {
+                res.send(201, {message:ans});
+                console.log("ans = " + ans);
+                res.end();
+            })
         } catch (e) {
-            res.writeHead(409);
-            // todo send fail res
+            res.send(409, {message: "trade Failed"});
+            res.end();
         }
-        res.end();
+
 
     });
     server.get({path: "/companies"}, async function (req,res,next) {
@@ -98,7 +104,7 @@ async function start(): Promise<tradeRoom> {
         res.end();
     });
     server.get({path: "/company/:name"}, function (req, res, next) {
-        // todo
+        // todo get money AND get holdings
         res.send(404);
         res.end();
     })
@@ -116,7 +122,7 @@ async function start(): Promise<tradeRoom> {
 
 start().then((r) => {
     console.log("done setup, ready to use");
-    setInterval(r.executeTrades, 100, r);
+    // setInterval(r.executeTrades, 100, r);
     // while (r.active) {
     //
     // }

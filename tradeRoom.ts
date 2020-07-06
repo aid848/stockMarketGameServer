@@ -120,128 +120,147 @@ export default class tradeRoom {
         }
         return;
     }
-    private async executeTrade(trade: trade, self: tradeRoom): Promise<void> { // todo convert to sending promise value to request
+    public async executeTrade(trade: trade, self: tradeRoom): Promise<String> { // todo convert to sending promise value to request
+        if(trade.amount === null) {
+            return "amount invalid";
+        }
         if (trade.operation == 1) { // buy
             if(trade.amount <= 0) {
-                return;
+                return "Negative Amount is Invalid";
             }
-            self.sql.all("Select DISTINCT money FROM main.companyaccount WHERE name = \"" + trade.buyer + "\"", function (err: any, rows: any) { // check enough money
-                let money: number = undefined;
-                let cost: number = undefined;
-                let shares: number = undefined;
-                let value: number = undefined;
+            return new Promise<string>((resolve, reject) => {
+                self.sql.all("Select DISTINCT money FROM main.companyaccount WHERE name = \"" + trade.buyer + "\"", function (err: any, rows: any) { // check enough money
+                    let money: number = undefined;
+                    let cost: number = undefined;
+                    let shares: number = undefined;
+                    let value: number = undefined;
                     if (err !== null || rows === null || rows === undefined) {
                         // errors++;
-                        return;
+                        resolve("Database Error 1");
                     } else {
                         if (rows.length === 1) {
                             // determine remaining money
                             money = rows[0].money;
                             // console.log(rows);
                         } else {
-                            return;;
+                            resolve("Database Error 2");
                             // errors++;
                         }
                     }
 
-                self.sql.all("Select DISTINCT sharesRemaining, value FROM main.companyindex WHERE name = \"" + trade.seller + "\"", function (err: any, rows: any) { // check available shares and price
-                    // console.log("e");
-                    if (err !== null || rows === null || rows === undefined) {
-                        // errors++;
-                        return;;
-                    } else {
-                        if (rows.length === 1) {
-                            // determine share number and value
-                            value = rows[0].value;
-                            shares = rows[0].sharesRemaining;
-                            // console.log(rows);
+                    self.sql.all("Select DISTINCT sharesRemaining, value FROM main.companyindex WHERE name = \"" + trade.seller + "\"", function (err: any, rows: any) { // check available shares and price
+                        // console.log("e");
+                        if (err !== null || rows === null || rows === undefined) {
+                            // errors++;
+                            resolve("Database Error 3");
                         } else {
-                            return;
-                            // errors++
-                        }
-                    }
-                    if (shares === undefined || money === undefined || value === undefined) {
-                        console.log("trade failed");
-                        console.log(shares);
-                        console.log(money);
-                        console.log(value);
-                        return;
-                    }
-                    cost = trade.amount * value;
-                    if (cost <= money && shares>= trade.amount) {
-                        console.log("trade accepted");
-                        // todo update seller and buyer tables
-                        self.sql.serialize(() => {
-                            // buyer remove money and put owned shares on record
-                            self.sql.run("UPDATE main.companyaccount set money = " + (money - cost) + " WHERE name = \"" + trade.buyer + "\"");
-                            // todo check if existing holdings
-                            self.sql.all("SELECT * FROM main.companyholdings WHERE holder = \"" + trade.buyer + "\" AND held = \"" + trade.seller + "\"", function (err:any, rows:any) {
-                                if(rows.length === 0) {
-                                    self.sql.run("INSERT INTO main.companyholdings(holder, held, amount) VALUES(\"" + trade.buyer + "\", \"" + trade.seller + "\" , " + trade.amount +");");
-                                }else { // update holdings
-                                    self.sql.run("UPDATE main.companyholdings set amount = " + (parseInt(rows[0].amount) + parseInt(String(trade.amount))) + " WHERE holder = \"" + trade.buyer + "\" AND held = \"" + trade.seller + "\"");
-                                }
-                            })
-                            self.sql.run("UPDATE main.companyindex set sharesremaining = " + (shares-trade.amount) + " where name = \"" + trade.seller + "\"")
-                            self.sql.run("UPDATE main.companyindex set previous_value = " + value + " where name = \"" + trade.seller + "\"")
-                            let newvalue:number = (value + value*self.tradeBias*trade.amount);
-                            if (newvalue <= 0) {
-                                newvalue = self.tradeBias*trade.amount;
+                            if (rows.length === 1) {
+                                // determine share number and value
+                                value = rows[0].value;
+                                shares = rows[0].sharesRemaining;
+                                // console.log(rows);
+                            } else {
+                                resolve("Database Error 4");
+                                // errors++
                             }
-                            self.sql.run("UPDATE main.companyindex set value = " + newvalue + " where name = \"" + trade.seller + "\"")
-                        });
-                    } else {
-                        console.log("trade unsuccessful" + cost + " and " + money);
-                    }
-                    return;
+                        }
+                        if (shares === undefined || money === undefined || value === undefined) {
+                            console.log("trade failed");
+                            console.log(shares);
+                            console.log(money);
+                            console.log(value);
+                            resolve("Could not find values in database");
+                        }
+                        cost = trade.amount * value;
+                        if (cost <= money && shares>= trade.amount) {
+                            console.log("trade accepted");
+                            self.sql.serialize(() => {
+                                // buyer remove money and put owned shares on record
+                                self.sql.run("UPDATE main.companyaccount set money = " + (money - cost) + " WHERE name = \"" + trade.buyer + "\"");
+                                // todo check if existing holdings
+                                self.sql.all("SELECT * FROM main.companyholdings WHERE holder = \"" + trade.buyer + "\" AND held = \"" + trade.seller + "\"", function (err:any, rows:any) {
+                                    if(rows.length === 0) {
+                                        self.sql.run("INSERT INTO main.companyholdings(holder, held, amount) VALUES(\"" + trade.buyer + "\", \"" + trade.seller + "\" , " + trade.amount +");");
+                                    }else { // update holdings
+                                        self.sql.run("UPDATE main.companyholdings set amount = " + (parseInt(rows[0].amount) + parseInt(String(trade.amount))) + " WHERE holder = \"" + trade.buyer + "\" AND held = \"" + trade.seller + "\"");
+                                    }
+                                })
+                                self.sql.run("UPDATE main.companyindex set sharesremaining = " + (shares-trade.amount) + " where name = \"" + trade.seller + "\"")
+                                self.sql.run("UPDATE main.companyindex set previous_value = " + value + " where name = \"" + trade.seller + "\"")
+                                let newvalue:number = (value + value*self.tradeBias*trade.amount);
+                                if (newvalue <= 0) {
+                                    newvalue = self.tradeBias*trade.amount;
+                                }
+                                self.sql.run("UPDATE main.companyindex set value = " + newvalue + " where name = \"" + trade.seller + "\"")
+                            });
+                        } else {
+                            console.log("trade unsuccessful" + cost + " and " + money);
+                            resolve("Trade Unsuccessful Cost too high. Cost: $" + cost.toFixed(2) + " you only have $" + money.toFixed(2));
+                        }
+                        resolve("Buy order accepted"); // todo better message
+                    });
                 });
-                });
+            });
 
         } else { // sell
-            self.sql.all("SELECT * FROM main.companyholdings WHERE holder = \"" + trade.buyer + "\" AND held = \"" + trade.seller + "\"",function (err:any, rows: any) {
-                if (rows.length === 1) {
-                    let amount:number = rows[0].amount;
-                    if(amount < trade.amount) { // check enough shares to sell
-                        console.log("insufficient shares");
-                        return;
-                    }
-                    self.sql.all("SELECT * FROM main.companyindex WHERE name = \"" + trade.seller + "\"", function (err, rows) {
-                        if (rows.length === 1){
-                            let value: number = rows[0].value;
-                            let remaining:number = rows[0].sharesRemaining;
-                            self.sql.all("SELECT * FROM main.companyaccount WHERE name = \"" + trade.buyer + "\"" , function (err,rows) {
+            return new Promise<string>((resolve, reject) => {
+                    self.sql.all("SELECT * FROM main.companyholdings WHERE holder = \"" + trade.buyer + "\" AND held = \"" + trade.seller + "\"", function (err: any, rows: any) {
+                        if (err !== null || rows === null || rows === undefined) {
+                            // errors++;
+                            resolve("Database Error 5");
+                        }
+                        if (rows.length === 1) {
+                            let amount: number = rows[0].amount;
+                            if (amount < trade.amount) { // check enough shares to sell
+                                console.log("insufficient shares");
+                                resolve("Insufficient shares");
+                            }
+                            self.sql.all("SELECT * FROM main.companyindex WHERE name = \"" + trade.seller + "\"", function (err, rows) {
+                                if (err !== null || rows === null || rows === undefined) {
+                                    // errors++;
+                                    resolve("Database Error 6");
+                                }
                                 if (rows.length === 1) {
-                                    let money:number = rows[0].money;
-                                    self.sql.serialize(() => {
-                                        // update remaining shares
-                                        self.sql.run("UPDATE main.companyholdings set amount = " + (amount - trade.amount) + " WHERE holder = \"" + trade.buyer + "\" AND held = \"" + trade.seller + "\"");
-                                        // add shares back to available
-                                        let sremaining:number = (remaining + parseInt(String(trade.amount))) as number
-                                        self.sql.run("UPDATE main.companyindex set sharesRemaining = " + sremaining + " WHERE name = \"" + trade.seller + "\"");
-                                        // todo drop share value
-                                        let newval:number = (value - (value * self.tradeBias * trade.amount));
-                                        if (newval < 0) {
-                                            newval = 0;
+                                    let value: number = rows[0].value;
+                                    let remaining: number = rows[0].sharesRemaining;
+                                    self.sql.all("SELECT * FROM main.companyaccount WHERE name = \"" + trade.buyer + "\"", function (err, rows) {
+                                        if (err !== null || rows === null || rows === undefined) {
+                                            // errors++;
+                                            resolve("Database Error 7");
                                         }
-                                        self.sql.run("UPDATE main.companyindex set value = " + newval + " WHERE name = \"" + trade.seller + "\"");
-                                        // todo add money
-                                        self.sql.run("UPDATE main.companyaccount set money = " + (money + value*trade.amount) + " WHERE name = \"" + trade.buyer + "\"");
+                                        if (rows.length === 1) {
+                                            let money: number = rows[0].money;
+                                            self.sql.serialize(() => {
+                                                // update remaining shares
+                                                self.sql.run("UPDATE main.companyholdings set amount = " + (amount - trade.amount) + " WHERE holder = \"" + trade.buyer + "\" AND held = \"" + trade.seller + "\"");
+                                                // add shares back to available
+                                                let sremaining: number = (remaining + parseInt(String(trade.amount))) as number
+                                                self.sql.run("UPDATE main.companyindex set sharesRemaining = " + sremaining + " WHERE name = \"" + trade.seller + "\"");
+                                                // todo drop share value
+                                                let newval: number = (value - (value * self.tradeBias * trade.amount));
+                                                if (newval < 0) {
+                                                    newval = 0;
+                                                }
+                                                self.sql.run("UPDATE main.companyindex set value = " + newval + " WHERE name = \"" + trade.seller + "\"");
+                                                // todo add money
+                                                self.sql.run("UPDATE main.companyaccount set money = " + (money + value * trade.amount) + " WHERE name = \"" + trade.buyer + "\"");
 
+                                            })
+                                        }
                                     })
                                 }
                             })
-                    }
+
+                            resolve("Sell Success");
+                        } else {
+                            console.log("no record of ownership");
+                            resolve("no record of ownership");
+                        }
                     })
+            });
 
-
-                }else {
-                    console.log("no record of ownership");
-                }
-                return;
-            })
 
         }
-        return;
     }
 
     public transferShares(){
