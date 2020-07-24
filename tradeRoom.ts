@@ -137,6 +137,7 @@ export default class tradeRoom {
                     if (err !== null || rows === null || rows === undefined) {
                         // errors++;
                         resolve("Database Error 1");
+                        return;
                     } else {
                         if (rows.length === 1) {
                             // determine remaining money
@@ -144,6 +145,7 @@ export default class tradeRoom {
                             // console.log(rows);
                         } else {
                             resolve("Database Error 2");
+                            return;
                             // errors++;
                         }
                     }
@@ -153,6 +155,7 @@ export default class tradeRoom {
                         if (err !== null || rows === null || rows === undefined) {
                             // errors++;
                             resolve("Database Error 3");
+                            return;
                         } else {
                             if (rows.length === 1) {
                                 // determine share number and value
@@ -161,6 +164,7 @@ export default class tradeRoom {
                                 // console.log(rows);
                             } else {
                                 resolve("Database Error 4");
+                                return;
                                 // errors++
                             }
                         }
@@ -170,6 +174,7 @@ export default class tradeRoom {
                             console.log(money);
                             console.log(value);
                             resolve("Could not find values in database");
+                            return;
                         }
                         cost = trade.amount * value;
                         if (cost <= money && shares>= trade.amount) {
@@ -177,7 +182,7 @@ export default class tradeRoom {
                             self.sql.serialize(() => {
                                 // buyer remove money and put owned shares on record
                                 self.sql.run("UPDATE main.companyaccount set money = " + (money - cost) + " WHERE name = \"" + trade.buyer + "\"");
-                                // todo check if existing holdings
+                                // check if existing holdings
                                 self.sql.all("SELECT * FROM main.companyholdings WHERE holder = \"" + trade.buyer + "\" AND held = \"" + trade.seller + "\"", function (err:any, rows:any) {
                                     if(rows.length === 0) {
                                         self.sql.run("INSERT INTO main.companyholdings(holder, held, amount) VALUES(\"" + trade.buyer + "\", \"" + trade.seller + "\" , " + trade.amount +");");
@@ -196,6 +201,7 @@ export default class tradeRoom {
                         } else {
                             console.log("trade unsuccessful" + cost + " and " + money);
                             resolve("Trade Unsuccessful Cost too high. Cost: $" + cost.toFixed(2) + " you only have $" + money.toFixed(2));
+                            return;
                         }
                         resolve("Buy order accepted"); // todo better message
                     });
@@ -208,17 +214,20 @@ export default class tradeRoom {
                         if (err !== null || rows === null || rows === undefined) {
                             // errors++;
                             resolve("Database Error 5");
+                            return;
                         }
                         if (rows.length === 1) {
                             let amount: number = rows[0].amount;
                             if (amount < trade.amount) { // check enough shares to sell
                                 console.log("insufficient shares");
                                 resolve("Insufficient shares");
+                                return;
                             }
                             self.sql.all("SELECT * FROM main.companyindex WHERE name = \"" + trade.seller + "\"", function (err, rows) {
                                 if (err !== null || rows === null || rows === undefined) {
                                     // errors++;
                                     resolve("Database Error 6");
+                                    return;
                                 }
                                 if (rows.length === 1) {
                                     let value: number = rows[0].value;
@@ -227,6 +236,7 @@ export default class tradeRoom {
                                         if (err !== null || rows === null || rows === undefined) {
                                             // errors++;
                                             resolve("Database Error 7");
+                                            return;
                                         }
                                         if (rows.length === 1) {
                                             let money: number = rows[0].money;
@@ -255,6 +265,7 @@ export default class tradeRoom {
                         } else {
                             console.log("no record of ownership");
                             resolve("no record of ownership");
+                            return;
                         }
                     })
             });
@@ -272,6 +283,19 @@ export default class tradeRoom {
                 return res;
             });
 
+    }
+
+    public async getCompanyData(self: tradeRoom, name:string):Promise<any> {
+        // todo refactor to avoid triple join, move money query to separate method and query
+        return new Promise(((resolve, reject) => {
+            self.sql.all("SELECT DISTINCT companyaccount.name,money,holder,held,amount, value\n" +
+                "FROM companyaccount JOIN companyholdings ON companyaccount.name = companyholdings.holder\n" +
+                "JOIN companyindex ON companyholdings.held = companyindex.name\n" +
+                "WHERE companyaccount.name = \"" + name + "\" AND holder = \""+ name +"\" ORDER BY value ASC;", (err:any, rows:any) => {
+                console.log(rows);
+                resolve(rows);
+            })
+        }));
     }
 
     private async checkCompanies(self: tradeRoom){

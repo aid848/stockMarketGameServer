@@ -7,8 +7,10 @@ let server:rest.Server
 let port:number = 8080;
 
 
-
+// todo setting for self ownership of stock
 async function start(): Promise<tradeRoom> {
+
+
     const cors = corsMiddleware({
         preflightMaxAge:5,
         origins: ["*"],
@@ -69,6 +71,7 @@ async function start(): Promise<tradeRoom> {
         }
     });
     server.post({path: "/accountCreate/:name/:pass/:cname"}, async function (req,res,next) {
+        // todo change endpoint to json
         let state:boolean = await room.createAccount(req.params.name, req.params.pass, req.params.cname);
         res.contentType = "json";
         if (state) {
@@ -103,9 +106,10 @@ async function start(): Promise<tradeRoom> {
         res.send(200,x);
         res.end();
     });
-    server.get({path: "/company/:name"}, function (req, res, next) {
+    server.get({path: "/company/:name"}, async function (req, res, next) {
         // todo get money AND get holdings
-        res.send(404);
+        let x = await room.getCompanyData(room, req.params.name);
+        res.send(200, x);
         res.end();
     })
 
@@ -113,11 +117,18 @@ async function start(): Promise<tradeRoom> {
     // todo
     // authentication
     // get report of individual company
+    // settings file
+    // admin console
     // get completed trades per person
     // post transfer shares
     return room;
 
 
+}
+
+async function configure(): Promise<boolean> {
+    // todo read from settings file, otherwise set to
+    return undefined;
 }
 
 start().then((r) => {
