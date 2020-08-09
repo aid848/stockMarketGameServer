@@ -8,6 +8,7 @@ let port:number = 8080;
 
 
 // todo setting for self ownership of stock
+// todo notifications
 async function start(): Promise<tradeRoom> {
 
 

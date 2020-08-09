@@ -18,6 +18,8 @@ export default class tradeRoom {
     public tradeQueue:trade[];
     private startingMoney = 1000.0;
     private tradeBias:number = 0.0005;
+    private buyBias:number;
+    private sellBias:number;
 
 
     constructor(name:string) {
@@ -32,6 +34,7 @@ export default class tradeRoom {
         })
         //todo move to discrete SQL files
         // todo trades database (completed and rejected)
+        // todo generate notification events
 
         // account database
         this.sql.run('CREATE TABLE IF NOT EXISTS main.companyaccount(' +
@@ -246,13 +249,13 @@ export default class tradeRoom {
                                                 // add shares back to available
                                                 let sremaining: number = (remaining + parseInt(String(trade.amount))) as number
                                                 self.sql.run("UPDATE main.companyindex set sharesRemaining = " + sremaining + " WHERE name = \"" + trade.seller + "\"");
-                                                // todo drop share value
                                                 let newval: number = (value - (value * self.tradeBias * trade.amount));
                                                 if (newval < 0) {
                                                     newval = 0;
                                                 }
+                                                // drop share value
                                                 self.sql.run("UPDATE main.companyindex set value = " + newval + " WHERE name = \"" + trade.seller + "\"");
-                                                // todo add money
+                                                // add money
                                                 self.sql.run("UPDATE main.companyaccount set money = " + (money + value * trade.amount) + " WHERE name = \"" + trade.buyer + "\"");
 
                                             })
@@ -291,7 +294,7 @@ export default class tradeRoom {
             self.sql.all("SELECT DISTINCT companyaccount.name,money,holder,held,amount, value\n" +
                 "FROM companyaccount JOIN companyholdings ON companyaccount.name = companyholdings.holder\n" +
                 "JOIN companyindex ON companyholdings.held = companyindex.name\n" +
-                "WHERE companyaccount.name = \"" + name + "\" AND holder = \""+ name +"\" ORDER BY value ASC;", (err:any, rows:any) => {
+                "WHERE holder = \""+ name +"\" ORDER BY value ASC;", (err:any, rows:any) => {
                 console.log(rows);
                 resolve(rows);
             })
