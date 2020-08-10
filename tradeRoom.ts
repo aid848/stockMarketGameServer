@@ -13,13 +13,10 @@ export default class tradeRoom {
     private readonly name: string;
     public active: boolean;
     private sql;
-    private defaultShares = 10000;
+    private defaultShares = 1000;
     private defaultPricePerShare = 5.00;
     public tradeQueue:trade[];
     private startingMoney = 1000.0;
-    private tradeBias:number = 0.0005;
-    private buyBias:number;
-    private sellBias:number;
 
 
     constructor(name:string) {
@@ -128,8 +125,13 @@ export default class tradeRoom {
             return "amount invalid";
         }
         if (trade.operation == 1) { // buy
-            if(trade.amount <= 0) {
+            console.log("getting: " + trade.amount);
+            if(trade.amount < 0) {
                 return "Negative Amount is Invalid";
+            }else if(trade.amount === 0){
+                return "Please Enter positive number of shares"
+            }else if(trade.amount%1 != 0) {
+                return "must be whole number of shares"
             }
             return new Promise<string>((resolve, reject) => {
                 self.sql.all("Select DISTINCT money FROM main.companyaccount WHERE name = \"" + trade.buyer + "\"", function (err: any, rows: any) { // check enough money
@@ -166,7 +168,7 @@ export default class tradeRoom {
                                 shares = rows[0].sharesRemaining;
                                 // console.log(rows);
                             } else {
-                                resolve("Database Error 4");
+                                resolve("Please Select a Company");
                                 return;
                                 // errors++
                             }
@@ -195,11 +197,11 @@ export default class tradeRoom {
                                 })
                                 self.sql.run("UPDATE main.companyindex set sharesremaining = " + (shares-trade.amount) + " where name = \"" + trade.seller + "\"")
                                 self.sql.run("UPDATE main.companyindex set previous_value = " + value + " where name = \"" + trade.seller + "\"")
-                                let newvalue:number = (value + value*self.tradeBias*trade.amount);
-                                if (newvalue <= 0) {
-                                    newvalue = self.tradeBias*trade.amount;
-                                }
-                                self.sql.run("UPDATE main.companyindex set value = " + newvalue + " where name = \"" + trade.seller + "\"")
+                                // let newvalue:number = (value + value*self.tradeBias*trade.amount);
+                                // if (newvalue <= 0) {
+                                //     newvalue = self.tradeBias*trade.amount;
+                                // }
+                                // self.sql.run("UPDATE main.companyindex set value = " + newvalue + " where name = \"" + trade.seller + "\"")
                             });
                         } else {
                             console.log("trade unsuccessful" + cost + " and " + money);
@@ -249,12 +251,12 @@ export default class tradeRoom {
                                                 // add shares back to available
                                                 let sremaining: number = (remaining + parseInt(String(trade.amount))) as number
                                                 self.sql.run("UPDATE main.companyindex set sharesRemaining = " + sremaining + " WHERE name = \"" + trade.seller + "\"");
-                                                let newval: number = (value - (value * self.tradeBias * trade.amount));
-                                                if (newval < 0) {
-                                                    newval = 0;
-                                                }
+                                                // let newval: number = (value - (value * self.tradeBias * trade.amount));
+                                                // if (newval < 0) {
+                                                //     newval = 0;
+                                                // }
                                                 // drop share value
-                                                self.sql.run("UPDATE main.companyindex set value = " + newval + " WHERE name = \"" + trade.seller + "\"");
+                                                // self.sql.run("UPDATE main.companyindex set value = " + newval + " WHERE name = \"" + trade.seller + "\"");
                                                 // add money
                                                 self.sql.run("UPDATE main.companyaccount set money = " + (money + value * trade.amount) + " WHERE name = \"" + trade.buyer + "\"");
 

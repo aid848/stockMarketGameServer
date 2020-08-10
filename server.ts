@@ -57,6 +57,7 @@ async function start(): Promise<tradeRoom> {
         // todo modify money
         // todo resetDB
         // todo backup/restore DB
+        // todo next trade cycle
         try {
             let answer = undefined;
             if(req.params.name === "stop") {
@@ -113,6 +114,38 @@ async function start(): Promise<tradeRoom> {
         res.send(200, x);
         res.end();
     })
+    server.get({path: "/notifications"}, async function (req,res,next) {
+        // todo get notifications for a user
+    });
+    server.get({path: "/companyPage/:company"}, function (req,res,next) {
+        // todo get company info page
+        return new Promise(((resolve, reject) => {
+            try {
+                let basePath:string = "company_pages/" + req.params.company + "/";
+                // let files = fs.readdirSync("company_pages/" + req.params.company);
+                // console.log(files);
+                let logo:string = fs.readFileSync(basePath + "logo.jpg", "base64");
+                let description:string = fs.readFileSync(basePath + "description.txt", "ascii");
+                let updates: any[] = [];
+                let updateNames: string[] = fs.readdirSync(basePath + "/updates");
+                for (let x = updateNames.length-1; x>0; x--) {
+                    let entry = fs.readFileSync(basePath + "updates/" + updateNames[x]);
+                    updates.push(entry);
+                }
+                updates = updates.reverse();
+                // console.log(logo);
+                res.send(200, {companyPhoto: logo, description: description, updates: updates});
+                resolve();
+            } catch (e) {
+                res.send(404, e);
+                reject(e);
+            }
+        })).then(() => {
+            res.end();
+        }).catch(() => {
+            res.end();
+        });
+    });
 
 
     // todo
