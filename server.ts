@@ -7,8 +7,6 @@ let server:rest.Server
 let port:number = 8080;
 
 
-// todo setting for self ownership of stock
-// todo notifications
 async function start(): Promise<tradeRoom> {
 
 
@@ -109,7 +107,7 @@ async function start(): Promise<tradeRoom> {
         res.end();
     });
     server.get({path: "/company/:name"}, async function (req, res, next) {
-        // todo get money AND get holdings
+
         let x = await room.getCompanyData(room, req.params.name);
         res.send(200, x);
         res.end();
@@ -128,8 +126,8 @@ async function start(): Promise<tradeRoom> {
                 let description:string = fs.readFileSync(basePath + "description.txt", "ascii");
                 let updates: any[] = [];
                 let updateNames: string[] = fs.readdirSync(basePath + "/updates");
-                for (let x = updateNames.length-1; x>0; x--) {
-                    let entry = fs.readFileSync(basePath + "updates/" + updateNames[x]);
+                for (let x = updateNames.length-1; x>=0; x--) {
+                    let entry = fs.readFileSync(basePath + "updates/" + updateNames[x], {encoding: "utf8"});
                     updates.push(entry);
                 }
                 updates = updates.reverse();
