@@ -25,39 +25,46 @@ export default class tradeRoom {
             fs.mkdirSync("db");
         }
         this.sql = new Database('./db/' + this.name + '.db')
-        this.sql.on("error", function (error) {
-            console.log("Your error was:" + error);
+        this.sql.serialize(() => {
+            this.sql.on("error", function (error) {
+                console.log("Your error was:" + error);
+            })
+            //todo move to discrete SQL files
+            // todo trades database (completed and rejected)
+            // todo generate notification events
+
+            // account database
+            this.sql.run('CREATE TABLE IF NOT EXISTS main.companyaccount(' +
+                'name TEXT UNIQUE,' +
+                'username TEXT PRIMARY KEY,' +
+                'password TEXT NOT NULL,' +
+                'money REAL);');
+
+            // trading database todo fix/add key constaints
+            this.sql.run('CREATE TABLE IF NOT EXISTS main.companyindex(' +
+                'name TEXT PRIMARY KEY,' +
+                'value REAL NOT NULL,' +
+                'sharesRemaining INTEGER NOT NULL,' +
+                'previous_value REAL NOT NULL' + // todo this needs to be computed in a better way
+                ');');
+
+
+            // todo holdings database (who owns what shares and how many)
+            // todo todo fix/add key constaints
+            this.sql.run('CREATE TABLE IF NOT EXISTS main.companyholdings(' +
+                'holder TEXT NOT NULL,' +
+                'held TEXT NOT NULL,' +
+                'amount INTEGER NOT NULL );');
+
+
+            this.createAccount("DEBUG-SHOULD-NOT-APPEAR", "1234", "DEBUG-SHOULD-NOT-APPEAR").then(()=> {
+                console.log("new account patch enabled")
+            });
+            this.active = true;
+            console.log("new trading room created: " + name)
         })
-        //todo move to discrete SQL files
-        // todo trades database (completed and rejected)
-        // todo generate notification events
-
-        // account database
-        this.sql.run('CREATE TABLE IF NOT EXISTS main.companyaccount(' +
-            'name TEXT UNIQUE,' +
-            'username TEXT PRIMARY KEY,' +
-            'password TEXT NOT NULL,' +
-            'money REAL);');
-
-        // trading database todo fix/add key constaints
-        this.sql.run('CREATE TABLE IF NOT EXISTS main.companyindex(' +
-            'name TEXT PRIMARY KEY,' +
-            'value REAL NOT NULL,' +
-            'sharesRemaining INTEGER NOT NULL,' +
-            'previous_value REAL NOT NULL' + // todo this needs to be computed in a better way
-            ');');
 
 
-        // todo holdings database (who owns what shares and how many)
-        // todo todo fix/add key constaints
-        this.sql.run('CREATE TABLE IF NOT EXISTS main.companyholdings(' +
-            'holder TEXT NOT NULL,' +
-            'held TEXT NOT NULL,' +
-            'amount INTEGER NOT NULL );');
-
-
-        this.active = true;
-        console.log("new trading room created: " + name)
     }
 
     public async createAccount(username, pass,companyname): Promise<boolean> {
