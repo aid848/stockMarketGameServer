@@ -1,5 +1,6 @@
 import * as rest from "restify";
 import tradeRoom, {trade} from "./tradeRoom";
+import {rank} from "./Ranks";
 import * as corsMiddleware from "restify-cors-middleware";
 const fs = require("fs");
 
@@ -72,9 +73,14 @@ async function start(): Promise<tradeRoom> {
     });
     server.post({path: "/accountCreate/:name/:pass/:cname"}, async function (req,res,next) {
         // todo change endpoint to json
+        // todo write company to like, like/dislike db
         let state:boolean = await room.createAccount(req.params.name, req.params.pass, req.params.cname);
+        let companyCheck:boolean = await room.checkCompany(room, req.params.cname);
+        // state = state && companyCheck;
         res.contentType = "json";
-        if (state) {
+        if (state === true) {
+            setupCompanyDirectory(req.params.cname);
+            fillCompanyDirectoryWithData(req.params.cname, req.params.description, req.params.logo, false);
             res.send(201, {accountCreated: "true"})
         } else {
             res.send(409, {accountCreated: "false"})
@@ -84,10 +90,7 @@ async function start(): Promise<tradeRoom> {
     });
     server.post({path: "/trade"}, async function (req, res, next) {
         try {
-            // console.log(req.body);
             let t:trade = new trade(req.body.amount,req.body.operation, req.body.seller, req.body.buyer, 0);
-            // let t:trade = new trade(req.params.amount,req.params.operation, req.params.seller, req.params.buyer, 0 );
-            // room.enqueueTrade(t); // todo provide response to trader when trade completed
             room.executeTrade(t, room).then((ans:string) => {
                 res.send(201, {message:ans});
                 console.log("ans = " + ans);
@@ -100,6 +103,18 @@ async function start(): Promise<tradeRoom> {
 
 
     });
+    server.post({path: "/rank"}, async function (req, res, next) {
+        let ranker:string = req.body.ranker;
+        let rankee:string = req.body.rankee;
+        // todo call rank db
+        res.send(400);
+        res.end();
+    })
+    server.post({path: "/writeCompanyInfo/:name"} , async function (req,res,next) {
+        fillCompanyDirectoryWithData(req.params.cname, req.params.description, req.params.logo, true);
+        res.send(201);
+        res.end();
+    })
     server.get({path: "/companies"}, async function (req,res,next) {
         res.contentType = "json";
         let x = await room.getCompanies(room)
@@ -107,11 +122,21 @@ async function start(): Promise<tradeRoom> {
         res.end();
     });
     server.get({path: "/company/:name"}, async function (req, res, next) {
+        console.log("name is :" + req.params.name)
+        return room.getCompanyData(room, req.params.name).then((x)=> {
+            res.send(200, x);
+            res.end();
+        });
 
-        let x = await room.getCompanyData(room, req.params.name);
-        res.send(200, x);
-        res.end();
-    })
+    });
+    server.get({path: "/companyHoldings/:name"}, async function (req, res, next) {
+
+        return room.getCompanyHoldings(room, req.params.name).then((x)=> {
+            res.send(200, x);
+            res.end();
+        });
+
+    });
     server.get({path: "/notifications"}, async function (req,res,next) {
         // todo get notifications for a user
     });
@@ -120,8 +145,6 @@ async function start(): Promise<tradeRoom> {
         return new Promise(((resolve, reject) => {
             try {
                 let basePath:string = "company_pages/" + req.params.company + "/";
-                // let files = fs.readdirSync("company_pages/" + req.params.company);
-                // console.log(files);
                 let logo:string = fs.readFileSync(basePath + "logo.jpg", "base64");
                 let description:string = fs.readFileSync(basePath + "description.txt", "ascii");
                 let updates: any[] = [];
@@ -131,7 +154,6 @@ async function start(): Promise<tradeRoom> {
                     updates.push(entry);
                 }
                 updates = updates.reverse();
-                // console.log(logo);
                 res.send(200, {companyPhoto: logo, description: description, updates: updates});
                 resolve();
             } catch (e) {
@@ -144,23 +166,50 @@ async function start(): Promise<tradeRoom> {
             res.end();
         });
     });
+    server.get({path: "/nameCheck/:name/:company"}, async function (req,res,next)  {
+        let ans: boolean = await room.checkAccount(room, req.params.name);
+        let comp: boolean = await room.checkCompany(room, req.params.company);
+        ans = ans && comp;
+        if(ans === true) {
+            res.send(200);
+        }else {
+            res.send(406);
+        }
+        res.end();
+    })
 
-
-    // todo
-    // authentication
-    // get report of individual company
-    // settings file
-    // admin console
-    // get completed trades per person
-    // post transfer shares
     return room;
 
 
 }
 
-async function configure(): Promise<boolean> {
-    // todo read from settings file, otherwise set to
-    return undefined;
+// async function configure(): Promise<boolean> {
+//     // todo read from settings file, otherwise set to
+//     return undefined;
+// }
+
+function setupCompanyDirectory(name:string):any {
+    let base:string = "company_pages/" + name + "/";
+    fs.mkdirSync(base);
+    fs.mkdirSync(base + "updates");
+}
+
+// REQUIRES: setupCompanyDirectory be run prior for folders to be set up
+function fillCompanyDirectoryWithData(name:string,description:string, logo:string, overwrite: boolean):any {
+    let base:string = "company_pages/" + name + "/";
+    if(overwrite){
+        fs.unlinkSync(base + "description.txt");
+        fs.unlinkSync(base + "logo.jpg");
+    }
+    fs.writeFileSync(base + "description.txt", description, {encoding: "utf8"});
+    fs.writeFileSync(base + "logo.jpg", logo, {encoding: "base64"});
+
+}
+
+type companyData = {
+    description:string;
+    logo:string;
+    updates:string[];
 }
 
 start().then((r) => {

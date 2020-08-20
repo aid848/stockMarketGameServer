@@ -1,5 +1,4 @@
 import {Database, RunResult, Statement} from "sqlite3";
-import get = Reflect.get;
 const fs = require("fs");
 
 
@@ -10,18 +9,18 @@ function err(error) {
 }
 
 export default class tradeRoom {
-    private readonly name: string;
+    public name: string;
     public active: boolean;
     private sql;
     private defaultShares = 1000;
     private defaultPricePerShare = 5.00;
-    public tradeQueue:trade[];
+    // public tradeQueue:trade[];
     private startingMoney = 1000.0;
 
 
     constructor(name:string) {
         this.name = name;
-        this.tradeQueue = new Array<trade>();
+        // this.tradeQueue = new Array<trade>();
         if (!fs.existsSync("db")) {
             fs.mkdirSync("db");
         }
@@ -62,41 +61,54 @@ export default class tradeRoom {
     }
 
     public async createAccount(username, pass,companyname): Promise<boolean> {
-        return this.checkAccount(username).then((res) => {
-            if (res) {
-                // console.log('insert INTO main.companyaccount(name, username, password)' +
-                //     ' VALUES (\"' + companyname + '\", \"' + username + "\",\"" + pass +  '\")');
-                // todo template statments to sql file
-                return this.sql.serialize(() => {
-                    this.sql.run('insert INTO main.companyaccount(name, username, password, money)' +
-                        ' VALUES (\"' + companyname + '\", \"' + username + "\",\"" + pass +  '\",' + this.startingMoney +  ')', undefined, err);
-                    this.sql.run('insert INTO main.companyindex(name,value,sharesRemaining,previous_value)' +
-                        ' VALUES (\"' + companyname + "\"," + this.defaultPricePerShare + ',' + this.defaultShares + "," + this.defaultPricePerShare + ')', undefined, err);
-                    return true;
-                });
+        return new Promise<boolean>((resolve, reject) => {
+            this.checkAccount(this,username).then((res:boolean) => {
+                if (res === true) {
+                    // todo template statments to sql file
+                    return this.sql.serialize(() => {
+                        this.sql.run('insert INTO main.companyaccount(name, username, password, money)' +
+                            ' VALUES (\"' + companyname + '\", \"' + username + "\",\"" + pass +  '\",' + this.startingMoney +  ')', undefined, err);
+                        this.sql.run('insert INTO main.companyindex(name,value,sharesRemaining,previous_value)' +
+                            ' VALUES (\"' + companyname + "\"," + this.defaultPricePerShare + ',' + this.defaultShares + "," + this.defaultPricePerShare + ')', undefined, err);
+                        this.sql.run("INSERT INTO main.companyholdings(holder, held, amount) VALUES(\"" + companyname + "\", \"" + "DEBUG-SHOULD-NOT-APPEAR" + "\" , " + 0 +");");
+                        this.sql.run("INSERT INTO main.companyholdings(holder, held, amount) VALUES(\"" + "DEBUG-SHOULD-NOT-APPEAR" + "\", \"" +  companyname + "\" , " + 0 +");");
+                        resolve(true);
+                    });
 
-            } else {
-                return false;
-            }
+                } else {
+                    resolve(false);
+                }
+            })
         })
+
     }
 
-    public enqueueTrade(trade:trade):void {
-        this.tradeQueue.push(trade);
+    // public enqueueTrade(trade:trade):void {
+    //     this.tradeQueue.push(trade);
+    // }
+
+    public async checkAccount(self,username):Promise<boolean> {
+        return new Promise<boolean>((resolve, reject) => {
+            self.sql.all("Select name FROM main.companyaccount WHERE username = \"" + username + "\"", [], (err: any, rows: any) => {
+                console.log(err);
+                console.log(rows)
+                resolve(!(rows.length > 0));
+            });
+        })
+
     }
 
-    public async checkAccount(username):Promise<boolean> {
-        return this.sql.all("Select name FROM main.companyaccount WHERE name = \"" + username + "\"", [], (err: any, rows: any) => {
-           console.log(err);
-           console.log(rows)
-            // return true;
-            return rows.length > 0;
+    public async checkCompany(self, companyName):Promise<boolean> {
+        return self.sql.all("Select name FROM main.companyaccount WHERE name = \"" + companyName + "\"", [], (err: any, rows: any) => {
+            console.log(err);
+            console.log(rows)
+            return !(rows.length > 0);
         });
     }
 
     public async loginCheck(username:string, password:string, self:tradeRoom):Promise<String> {
         // todo change to return access token
-        return new Promise<any> ((resolve, reject) => {self.sql.all("SELECT * FROM main.companyaccount WHERE username = \"" + username + "\" AND password = \"" + password + "\"", function (err:any, rows:any) {
+        return new Promise<any> ((resolve, reject) => {self.sql.all("SELECT * FROM companyaccount WHERE username = \"" + username + "\" AND password = \"" + password + "\"", function (err:any, rows:any) {
             console.log(rows);
             if(err!=undefined) {
                 reject("");
@@ -111,15 +123,15 @@ export default class tradeRoom {
         } )});
     }
 
-    public async executeTrades(self: tradeRoom):Promise<void>{
-        if (self.tradeQueue !== undefined) {
-            // console.log("queued trades: " + self.tradeQueue.length);
-            while (self.tradeQueue.length > 0) {
-                await self.executeTrade(self.tradeQueue.shift(), self);
-            }
-        }
-        return;
-    }
+    // public async executeTrades(self: tradeRoom):Promise<void>{
+    //     if (self.tradeQueue !== undefined) {
+    //         // console.log("queued trades: " + self.tradeQueue.length);
+    //         while (self.tradeQueue.length > 0) {
+    //             await self.executeTrade(self.tradeQueue.shift(), self);
+    //         }
+    //     }
+    //     return;
+    // }
     public async executeTrade(trade: trade, self: tradeRoom): Promise<String> { // todo convert to sending promise value to request
         if(trade.amount === null) {
             return "amount invalid";
@@ -297,10 +309,20 @@ export default class tradeRoom {
                 "FROM companyaccount JOIN companyholdings ON companyaccount.name = companyholdings.holder\n" +
                 "JOIN companyindex ON companyholdings.held = companyindex.name\n" +
                 "WHERE holder = \""+ name +"\" ORDER BY value ASC;", (err:any, rows:any) => {
+                console.log("name is :" + name);
                 console.log(rows);
                 resolve(rows);
             })
         }));
+    }
+
+    public async getCompanyHoldings(self, name) {
+        // -- SQLite
+        // SELECT DISTINCT companyaccount.name,money,holder,held,amount, value
+        // FROM companyaccount
+        // JOIN companyholdings ON companyaccount.name = companyholdings.holder
+        // JOIN companyindex ON companyholdings.held = companyindex.name
+        // WHERE holder = "SouthAfrika" ORDER BY value ASC
     }
 
     private async checkCompanies(self: tradeRoom){
