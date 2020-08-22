@@ -71,16 +71,17 @@ async function start(): Promise<tradeRoom> {
             return null;
         }
     });
-    server.post({path: "/accountCreate/:name/:pass/:cname"}, async function (req,res,next) {
-        // todo change endpoint to json
+    server.post({path: "/accountCreate"}, async function (req,res,next) {
         // todo write company to like, like/dislike db
-        let state:boolean = await room.createAccount(req.params.name, req.params.pass, req.params.cname);
-        let companyCheck:boolean = await room.checkCompany(room, req.params.cname);
-        // state = state && companyCheck;
         res.contentType = "json";
+        let state:boolean = await room.createAccount(req.body.name, req.body.pass, req.body.cname);
+        let companyCheck:boolean = await room.checkCompany(room, req.body.cname);
+        // todo reinable companyName check
+        // state = state && companyCheck;
+
         if (state === true) {
-            setupCompanyDirectory(req.params.cname);
-            fillCompanyDirectoryWithData(req.params.cname, req.params.description, req.params.logo, false);
+            setupCompanyDirectory(req.body.cname);
+            fillCompanyDirectoryWithData(req.body.cname, req.body.description, req.body.logo, false);
             res.send(201, {accountCreated: "true"})
         } else {
             res.send(409, {accountCreated: "false"})
@@ -194,6 +195,17 @@ function setupCompanyDirectory(name:string):any {
     fs.mkdirSync(base + "updates");
 }
 
+function decodeBase64Image(dataString) {
+    var matches = dataString.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/), response = {
+        type: undefined,
+        data: undefined
+    };
+    response.type = matches[1];
+    response.data = new Buffer(matches[2], 'base64');
+
+    return response;
+}
+
 // REQUIRES: setupCompanyDirectory be run prior for folders to be set up
 function fillCompanyDirectoryWithData(name:string,description:string, logo:string, overwrite: boolean):any {
     let base:string = "company_pages/" + name + "/";
@@ -202,7 +214,9 @@ function fillCompanyDirectoryWithData(name:string,description:string, logo:strin
         fs.unlinkSync(base + "logo.jpg");
     }
     fs.writeFileSync(base + "description.txt", description, {encoding: "utf8"});
-    fs.writeFileSync(base + "logo.jpg", logo, {encoding: "base64"});
+    let cleaned = decodeBase64Image(logo);
+    console.log(cleaned);
+    fs.writeFileSync(base + "logo.jpg", cleaned.data);
 
 }
 
