@@ -1,14 +1,16 @@
 import * as rest from "restify";
 import tradeRoom, {trade} from "./tradeRoom";
-import {rank} from "./Ranks";
+
 import * as corsMiddleware from "restify-cors-middleware";
+import Ranks from "./Ranks";
 const fs = require("fs");
 
 let server:rest.Server
-let port:number = 8080;
+let port:number;
+let epoch:number;
 
 
-async function start(): Promise<tradeRoom> {
+async function start(): Promise<{ tradeRoom, Ranks }> {
 
 
     const cors = corsMiddleware({
@@ -18,9 +20,13 @@ async function start(): Promise<tradeRoom> {
         exposeHeaders: ["*"],
 
     });
+    let startup:{port, epoch} = await configure();
+    port = startup.port;
+    epoch = startup.epoch;
 
     server = rest.createServer({name: "test"});
     let room:tradeRoom = new tradeRoom("test");
+    let ranks: Ranks = new Ranks(room);
     server.pre(cors.preflight);
     server.use(cors.actual);
     server.use(rest.plugins.bodyParser());
@@ -51,30 +57,35 @@ async function start(): Promise<tradeRoom> {
             res.end();
         }
     });
-    server.post({path: "/adminop/:name"}, function (req,res,next) {
-        // todo modify stock price
-        // todo modify money
-        // todo resetDB
-        // todo backup/restore DB
-        // todo next trade cycle
-        try {
-            let answer = undefined;
-            if(req.params.name === "stop") {
-                answer = room.stop();
-            }
-            res.send(200);
-            res.end();
-            process.exit(0);
-            return next();
-        } catch (e) {
-            console.log(e);
-            return null;
+    server.post({path: "/adminop/:code"}, function (req,res,next) {
+        // todo some authentication
+
+        switch (req.params.code) {
+            case 1: // stop server
+                res.send(200);
+                res.end();
+                process.exit(0);
+                break;
+            case 2: // todo modify stock price
+                break;
+            case 3: // todo modify money
+                break;
+            case 4: // todo resetDBs and pages (purge system data)
+                break;
+            case 5: // todo backup/restore DB
+                break;
+            case 6: // next trade cycle
+                advanceEpoch();
+                break;
+            default:
+                res.send(404);
         }
+        res.end();
     });
     server.post({path: "/accountCreate"}, async function (req,res,next) {
         // todo write company to like, like/dislike db
         res.contentType = "json";
-        let state:boolean = await room.createAccount(req.body.name, req.body.pass, req.body.cname);
+        let state:boolean = await room.createAccount(req.body.name, req.body.password, req.body.cname);
         let companyCheck:boolean = await room.checkCompany(room, req.body.cname);
         // todo reinable companyName check
         // state = state && companyCheck;
@@ -107,15 +118,35 @@ async function start(): Promise<tradeRoom> {
     server.post({path: "/rank"}, async function (req, res, next) {
         let ranker:string = req.body.ranker;
         let rankee:string = req.body.rankee;
-        // todo call rank db
-        res.send(400);
-        res.end();
+        let rank:number = req.body.rank;
+        ranks.rank(ranks,ranker,rankee,rank).then((ans)=> {
+            if(ans === true) {
+                res.send(200);
+            }else {
+                res.send(409);
+            }
+            res.end();
+        });
+
     })
     server.post({path: "/writeCompanyInfo/:name"} , async function (req,res,next) {
         fillCompanyDirectoryWithData(req.params.cname, req.params.description, req.params.logo, true);
         res.send(201);
         res.end();
     })
+    server.post({path: "/writeUpdate/:name"}, async function (req,res,next) {
+        room.checkAccount(room, req.params.name).then((re) => {
+            if(re === true) {
+                fs.writeFileSync("company_pages/"+req.params.name + "/updates/" + epoch + ".txt", req.body.update);
+                res.send(201)
+            }else {
+                res.send(400);
+            }
+            res.end();
+        })
+
+    })
+
     server.get({path: "/companies"}, async function (req,res,next) {
         res.contentType = "json";
         let x = await room.getCompanies(room)
@@ -178,16 +209,56 @@ async function start(): Promise<tradeRoom> {
         }
         res.end();
     })
+    server.get({path: "/checkRanked/:ranker/:rankee"}, function (req,res,next) {
+        let ranker:string = req.params.ranker;
+        let rankee:string = req.params.rankee;
+        ranks.checkRanked(ranks,ranker,rankee).then((ans) => {
+           res.send(200, ans);
+           res.end();
+        }).catch((err) => {
+            res.send(400, err);
+            res.end();
+        });
+        });
 
-    return room;
+    return {Ranks: room, tradeRoom: ranks};
 
 
 }
 
-// async function configure(): Promise<boolean> {
-//     // todo read from settings file, otherwise set to
-//     return undefined;
-// }
+async function configure(): Promise<{port, epoch}> {
+    return new Promise<{port,epoch}>(((resolve, reject) => {
+        let name:string = "settings.dll";
+        let found = fs.existsSync(name);
+        if(found === false) { // defaults since no settings file found
+            let d = {port: 8080, epoch:1};
+
+            resolve(d);
+        }else {
+            let file = fs.readFileSync(name);
+            let d = JSON.parse(file);
+            console.log(d);
+            resolve(d);
+        }
+    }))
+    // todo read from settings file
+    // read trade cycle here
+
+}
+
+function saveSettings(): void {
+    fs.writeFileSync(name, JSON.stringify({port, epoch}));
+    return;
+}
+
+function advanceEpoch(): void {
+    epoch += 1;
+    // todo recalculate stock prices based on ranks db, perform query for each rankee: sum rank column and divide by total users for price modifier
+
+    // todo drop rank table
+    saveSettings();
+    return;
+}
 
 function setupCompanyDirectory(name:string):any {
     let base:string = "company_pages/" + name + "/";

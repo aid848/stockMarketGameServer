@@ -8,41 +8,49 @@ export default class Ranks {
 
     constructor(tradeRoom:tradeRoom) {
         this.name = tradeRoom.name + " ranks";
-        if (!fs.existsSync("db")) {
-            fs.mkdirSync("db");
-        }
         this.sql = new Database('./db/' + this.name + '.db')
         this.sql.on("error", function (error) {
             console.log("Your error was:" + error);
         })
-        // account database
-        this.sql.run('CREATE TABLE IF NOT EXISTS main.companyaccount(' +
-            'name TEXT UNIQUE,' +
-            'username TEXT PRIMARY KEY,' +
-            'password TEXT NOT NULL,' +
-            'money REAL);');
+        // ranking database
+        this.sql.run('CREATE TABLE IF NOT EXISTS ranks(' +
+            'ranker TEXT,' +
+            'rankee TEXT,' +
+            'rank integer);');
 
-        console.log("new ranking system created: " + name)
+        console.log("new ranking system created: " + this.name)
     }
+
+    // call to make ranking
+    public rank(self:Ranks,ranker:string, rankee:string, rank:number):Promise<boolean> {
+        return self.checkRanked(self,ranker,rankee).then((res) => {
+                if(res.ranked === true) { // new rank
+                    self.sql.run("INSERT INTO ranks(ranker, rankee, rank) VALUES( \"" + ranker + "\",\"" + rankee + "\", " + rank + " );");
+                }else { // already ranked
+                    self.sql.run("UPDATE ranks set rank = " + rank + " WHERE ranker = \" " + ranker + "\" AND rankee = \"" + rankee + "\"")
+                }
+                return true;
+            });
+    }
+    // returns if ranked and what the rank was
+    public checkRanked(self:Ranks,ranker:string, rankee:string):Promise<{ ranked: boolean, rating:number }> {
+        return new Promise<{ ranked: boolean, rating:number }>(((resolve, reject) => {
+            self.sql.all("SELECT * FROM ranks WHERE ranker = \" " + ranker + "\" AND rankee = \"" + rankee + "\"", (err:any, rows:any) => {
+                if(err !== undefined) {
+                    console.log(err);
+                    reject(err);
+                }
+                let rnk:number = 0;
+                if(rows.length > 0) {
+                    rnk = rows[0].rank;
+                }
+                let x: { ranked; rating };
+                x.ranked = (rows.length > 0);
+                x.rating = rnk;
+                resolve(x);
+            });
+        }))
+    }
+
 }
 
-export function rank(self:Ranks,ranker:string, rankee:string):boolean {
-    // todo perform rank operation here,
-
-    // check table exists
-    self.sql.all("SELECT * \n" +
-        "FROM information_schema.tables\n" +
-        "WHERE table_schema = \""+ self.name +"\" \n" +
-        "    AND table_name = \""+ rankee +"\"\n" +
-        "LIMIT 1;", (err: any, rows: any) => {
-
-        if(rows>0) {
-            // todo rankee is already ranked. Read from table and check if ranker is in table, if not add to table with score
-        }else {
-            // todo rankee not ranked, create table and add ranker to table
-        }
-
-    })
-
-    return false;
-}
